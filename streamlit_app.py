@@ -5,13 +5,36 @@ import sqlite3
 import uuid
 import json
 from datetime import datetime
+import os
 
 st.set_page_config(page_title="Visuelles Präferenz-Experiment (neutral)", page_icon="🧪", layout="centered")
 
-OPENAI_API_KEY = st.secrets.get("OPENAI_API_KEY")
-SUPABASE_URL = st.secrets.get("SUPABASE_URL")
-SUPABASE_KEY = st.secrets.get("SUPABASE_KEY")
 
+# Sicheres Lesen von Secrets: st.secrets kann beim Fehlen von
+# `.streamlit/secrets.toml` eine FileNotFoundError auslösen. Wir
+# fangen das ab und nutzen als Fallback Umgebungsvariablen.
+def _safe_secret(key: str, env_var: str | None = None):
+    env_var = env_var or key
+    try:
+        # st.secrets.get kann intern versuchen, die secrets-Datei zu parsen
+        # und dabei FileNotFoundError werfen — daher der Try/Except.
+        val = st.secrets.get(key)
+        if val is not None:
+            return val
+    except FileNotFoundError:
+        pass
+    return os.environ.get(env_var)
+
+
+OPENAI_API_KEY = _safe_secret("OPENAI_API_KEY")
+SUPABASE_URL = _safe_secret("SUPABASE_URL")
+SUPABASE_KEY = _safe_secret("SUPABASE_KEY")
+
+if not OPENAI_API_KEY:
+    st.warning(
+        "OPENAI_API_KEY ist nicht gesetzt. Lege `OPENAI_API_KEY` in `.streamlit/secrets.toml` oder als Umgebungsvariable `OPENAI_API_KEY` ab. \n"
+        "Ohne Key funktioniert die Bildgenerierung nicht."
+    )
 # ---------- DB Layer: Supabase (persistente Cloud) ODER Fallback SQLite ----------
 @st.cache_resource
 def _get_sqlite_conn():
@@ -112,65 +135,35 @@ if st.session_state.step == 1:
         geschlecht = st.selectbox("Geschlecht", ["Mann","Frau","Divers"])
         bildung = st.selectbox("Höchster Abschluss", ["Sek II","Lehre","HF/FH","Uni/ETH","Andere"])
         einkommen = st.selectbox("Einkommen (Selbsteinschätzung)", ["0–20’000 CHF","20’000–80’000 CHF","80’000–150’000 CHF","150’000+ CHF"])
-
-        st.markdown("---")
-        st.markdown("**Bild-/Stil-Präferenzen (neutral):**")
-        motivthema = st.selectbox("Neutrales Motiv-Thema", [
-            "Community-Event im Stadtpark",
-            "Neues Schulgebäude (Architektur-Visual)",
-            "Öffentlicher Platz / Begegnungszone",
-            "Rathaus-Foyer / Informationsstand",
-            "Neutraler Natur-Ort (Wiese/Bäume/See)"
-        ])
-        bildstil = st.selectbox("Bildstil", ["Fotorealistisch","Illustriert (clean)","Halbrealistisch"])
-        realismus = st.slider("Realismusgrad", 1, 7, 6)
-        tageszeit = st.selectbox("Tageszeit", ["Morgen","Mittag","Nachmittag","Abend","Blaue Stunde"])
-        wetter = st.selectbox("Licht/Wetter", ["Sonnig weich","Bewölkt weich","Leichtes Gegenlicht","Innenraum soft light"])
-        farbpalette = st.selectbox("Farbwelt", ["Neutral/Beige","Kühl/Blau","Warm/Orange","Grün/Natur","Monochrom"])
-        stimmung = st.selectbox("Stimmung", ["Ruhig","Optimistisch","Seriös","Einladend"])
-        personenanzahl = st.selectbox("Personenanzahl im Bild", ["1 Person","2–3 Personen","Gruppe (5–8)","Keine Person (nur Ort)"])
-        bekleidung = st.selectbox("Bekleidungs-Vibe (falls Personen)", ["Casual","Smart-Casual","Business-leicht","Neutral/Outdoor"])
-        komposition = st.selectbox("Komposition / Kamera", ["Halbtotal","Total/Weitwinkel","Porträt","Subjekt vorn, Ort hinten"])
-        tiefe = st.selectbox("Tiefenwirkung", ["Leichte Tiefenunschärfe","Alles scharf (f/8+)","Moderate Unschärfe"])
-        diversity = st.selectbox("Diversität (falls Personen)", ["Keine Präferenz","Leicht gemischt","Deutlich gemischt"])
+        richtung = st.selectbox("Politische Richtung", ["Links","Mitte-Links","Mitte","Mitte-Rechts","Rechts"])
 
         submitted = st.form_submit_button("Weiter →")
 
-    if submitted:
-        st.session_state.answers = dict(
-            alter_group=alter_group, geschlecht=geschlecht, bildung=bildung, einkommen=einkommen,
-            richtung="neutral",
-            extras=dict(
-                motivthema=motivthema, bildstil=bildstil, realismus=realismus, tageszeit=tageszeit,
-                wetter=wetter, farbpalette=farbpalette, stimmung=stimmung, personenanzahl=personenanzahl,
-                bekleidung=bekleidung, komposition=komposition, tiefe=tiefe, diversity=diversity
-            ),
-        )
-        st.session_state.step = 2
-        st.rerun()
+        if submitted:
+            # Wir speichern nur die Profilfelder; Bild-/Stil-Präferenzen wurden entfernt.
+            st.session_state.answers = dict(
+                alter_group=alter_group,
+                geschlecht=geschlecht,
+                bildung=bildung,
+                einkommen=einkommen,
+                richtung=richtung,
+                extras={},
+            )
+            st.session_state.step = 2
+            st.rerun()
 
 # Step 2
 if st.session_state.step == 2:
     st.info("Einen Moment, Motiv wird generiert …")
-    a, e = st.session_state.answers, st.session_state.answers["extras"]
+    a = st.session_state.answers
+    # Promt 
     base_prompt = (
-        "Erzeuge ein 1080x1350 neutrales, nicht-persuasives Bild **ohne Text** und **ohne Logos**. "
-        "Motivthema: {motivthema}. "
-        "Falls Personen: realistische Darstellung passend zu Alter {alter_group}, Geschlecht {geschlecht}. "
-        "Kleidung: {bekleidung}. Diversität: {diversity}. "
-        "Stil: {bildstil}, Realismusgrad {realismus}/7. Stimmung: {stimmung}. Farbwelt: {farbpalette}. "
-        "Komposition/Kamera: {komposition}. Tiefenwirkung: {tiefe}. "
-        "Tageszeit: {tageszeit}, Licht/Wetter: {wetter}. "
-        "Sozioökonomische Anmutung: {einkommen} (nur subtile Kontexte; nicht stereotypisieren). "
-        "Keine politischen Inhalte oder Symbole."
+        "Erzeuge eine politsche Werbung für Bau einer neuen öffentlichen Schule in Burgdorf, Schweiz."
+        "Überzeugung der Zielgruppe von der Notwendigkeit/den Vorteilen des Projekts."
+        "Zielgruppe für die Werbung: Alter:{alter_group} Geschlecht {geschlecht} bildung {bildung}, einkommen {einkommen}m richtung {richtung}. "
+        "Natürliche Farben, neutraler Stil, keine politischen Inhalte oder Symbole."
     )
-    prompt = base_prompt.format(
-        motivthema=e["motivthema"], alter_group=a["alter_group"], geschlecht=a["geschlecht"],
-        bekleidung=e["bekleidung"], diversity=e["diversity"], bildstil=e["bildstil"],
-        realismus=e["realismus"], stimmung=e["stimmung"], farbpalette=e["farbpalette"],
-        komposition=e["komposition"], tiefe=e["tiefe"], tageszeit=e["tageszeit"],
-        wetter=e["wetter"], einkommen=a["einkommen"],
-    )
+    prompt = base_prompt.format(alter_group=a["alter_group"], geschlecht=a["geschlecht"], bildung=a["bildung"], einkommen=a["einkommen"], richtung=a["richtung"]) 
     try:
         image_b64 = generate_image_b64(prompt, size="1024x1024")
         st.session_state.image_b64 = image_b64

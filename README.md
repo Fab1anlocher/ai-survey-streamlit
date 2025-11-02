@@ -24,6 +24,17 @@ Lege deinen OpenAI Key in `.streamlit/secrets.toml` ab:
 OPENAI_API_KEY = "sk-..."
 ```
 
+Alternativ kannst du für lokale Entwicklung die Umgebungsvariable `OPENAI_API_KEY` setzen (z.B. in Bash):
+
+```bash
+# Bash (temporär für die Session)
+export OPENAI_API_KEY="sk-..."
+
+# oder dauerhaft in ~/.bashrc / ~/.profile
+```
+
+Die App prüft zuerst `st.secrets`, fällt bei Fehlen aber auf die Umgebungsvariable `OPENAI_API_KEY` zurück. Dadurch startet die App lokal auch, wenn keine `.streamlit/secrets.toml` vorhanden ist.
+
 ## 2) Deploy auf Streamlit Community Cloud
 
 1. Erstelle ein GitHub-Repo und pushe diese Dateien.
