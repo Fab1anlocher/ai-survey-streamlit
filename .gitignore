@@ -1,0 +1,13 @@
+# Python venv
+.venv/
+__pycache__/
+*.pyc
+
+# Local data
+survey.db
+.env
+.streamlit/secrets.toml
+
+# Streamlit / cache
+.streamlit/
+.cache/
