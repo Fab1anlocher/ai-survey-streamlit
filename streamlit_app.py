@@ -84,10 +84,37 @@ SQLITE = _get_sqlite_conn() if SUPABASE is None else None
 
 def db_insert_response(row: dict):
     if SUPABASE is not None:
-        # Supabase: Insert
-        res = SUPABASE.table("responses").insert(row).execute()
-        if res.error:
-            raise RuntimeError(str(res.error))
+        # Supabase: Insert (robust handling for different client response shapes)
+        try:
+            res = SUPABASE.table("responses").insert(row).execute()
+        except Exception as e:
+            # Netzwerk/client-level error
+            raise RuntimeError(f"Supabase insert failed: {e}")
+
+        # Try various ways to detect an error on the response object/dict
+        err = None
+        try:
+            err = getattr(res, "error", None)
+        except Exception:
+            err = None
+
+        if err is None and isinstance(res, dict):
+            err = res.get("error") or res.get("message")
+
+        status = None
+        try:
+            status = getattr(res, "status_code", getattr(res, "status", None))
+        except Exception:
+            status = None
+
+        if err or (isinstance(status, int) and status >= 400):
+            # Try to collect useful debug info
+            info = None
+            try:
+                info = getattr(res, "data", None) or (res.get("data") if isinstance(res, dict) else None)
+            except Exception:
+                info = None
+            raise RuntimeError(f"Supabase insert error: {err or status} | {info}")
     else:
         # SQLite Fallback
         with SQLITE:
@@ -106,12 +133,41 @@ def db_insert_response(row: dict):
 
 def db_fetch_recent(n=50):
     if SUPABASE is not None:
-        res = SUPABASE.table("responses") \
-            .select("id,created_at,alter_group,geschlecht,bildung,richtung,einkommen,gefallen,ueberzeugung") \
-            .order("created_at", desc=True).limit(n).execute()
-        if res.error:
-            raise RuntimeError(str(res.error))
-        return res.data or []
+        try:
+            res = SUPABASE.table("responses") \
+                .select("id,created_at,alter_group,geschlecht,bildung,richtung,einkommen,gefallen,ueberzeugung") \
+                .order("created_at", desc=True).limit(n).execute()
+        except Exception as e:
+            raise RuntimeError(f"Supabase query failed: {e}")
+
+        # robust error detection
+        err = None
+        try:
+            err = getattr(res, "error", None)
+        except Exception:
+            err = None
+
+        if err is None and isinstance(res, dict):
+            err = res.get("error") or res.get("message")
+
+        status = None
+        try:
+            status = getattr(res, "status_code", getattr(res, "status", None))
+        except Exception:
+            status = None
+
+        if err or (isinstance(status, int) and status >= 400):
+            raise RuntimeError(f"Supabase query error: {err or status}")
+
+        data = None
+        try:
+            data = getattr(res, "data", None)
+        except Exception:
+            data = None
+        if data is None and isinstance(res, dict):
+            data = res.get("data")
+
+        return data or []
     else:
         cur = SQLITE.execute("""
             SELECT id, created_at, alter_group, geschlecht, bildung, richtung, einkommen, gefallen, ueberzeugung
