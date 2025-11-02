@@ -26,9 +26,9 @@ def _safe_secret(key: str, env_var: str | None = None):
     return os.environ.get(env_var)
 
 
-OPENAI_API_KEY = _safe_secret("OPENAI_API_KEY")
-SUPABASE_URL = _safe_secret("SUPABASE_URL")
-SUPABASE_KEY = _safe_secret("SUPABASE_KEY")
+OPENAI_API_KEY=_safe_secret("OPENAI_API_KEY")
+SUPABASE_URL=_safe_secret("SUPABASE_URL")
+SUPABASE_KEY=_safe_secret("SUPABASE_KEY")
 
 if not OPENAI_API_KEY:
     st.warning(
@@ -286,8 +286,9 @@ if st.session_state.step == 2:
     )
     prompt = base_prompt + f" Zielgruppe: Alter {a['alter_group']}, Geschlecht {a['geschlecht']}, Bildung {a['bildung']}, Einkommen {a['einkommen']}, politische Richtung {a['richtung']}."
     try:
-        # Standardgröße verringert (512x512) reduziert Kosten; erhöhe zu 1024x1024 wenn höhere Auflösung benötigt wird.
-        image_b64 = generate_image_b64(prompt, size="512x512")
+        # Hinweis: Die aktuelle Image-API erlaubt nur bestimmte Größen (z.B. '1024x1024', '1024x1536', '1536x1024' oder 'auto').
+        # 512x512 wird vom API nicht akzeptiert. Wir verwenden hier '1024x1024' (kleinste unterstützte quadratische Größe).
+        image_b64 = generate_image_b64(prompt, size="1024x1024")
         st.session_state.image_b64 = image_b64
         st.session_state.prompt = prompt
         st.session_state.step = 3
