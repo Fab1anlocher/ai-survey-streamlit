@@ -227,16 +227,19 @@ if st.session_state.step == 1:
 if st.session_state.step == 2:
     st.info("Einen Moment, Motiv wird generiert …")
     a = st.session_state.answers
-    # Promt 
+    # Kürzerer, präziser Prompt (weniger Tokenkosten).
+    # Hinweis: Wir fordern eine zentrierte Komposition mit 10% Rand, damit wichtige Inhalte nicht abgeschnitten werden.
     base_prompt = (
-        "Erzeuge eine politsche Werbung für Bau einer neuen öffentlichen Schule in Burgdorf, Schweiz."
-        "Überzeugung der Zielgruppe von der Notwendigkeit/den Vorteilen des Projekts."
-        "Zielgruppe für die Werbung: Alter:{alter_group} Geschlecht {geschlecht} bildung {bildung}, einkommen {einkommen}m richtung {richtung}. "
-        "Natürliche Farben, neutraler Stil, keine politischen Inhalte oder Symbole."
+        "Politische Anzeige für den Bau einer neuen öffentlichen Schule in Burgdorf, Schweiz."
+        "Überzeuge die Zielgruppe kurz von den Vorteilen des Projekts."
+        "Motiv: stimmige, positive Alltagsszene; keine Text-Overlays oder Logos."
+        "Komposition: zentriert, gesamte Szene sichtbar, mindestens 10% Freiraum an allen Rändern (nicht zuschneiden)."
+        "Farben: natürlich, freundliche Beleuchtung."
     )
-    prompt = base_prompt.format(alter_group=a["alter_group"], geschlecht=a["geschlecht"], bildung=a["bildung"], einkommen=a["einkommen"], richtung=a["richtung"]) 
+    prompt = base_prompt + f" Zielgruppe: Alter {a['alter_group']}, Geschlecht {a['geschlecht']}, Bildung {a['bildung']}, Einkommen {a['einkommen']}, politische Richtung {a['richtung']}."
     try:
-        image_b64 = generate_image_b64(prompt, size="1024x1024")
+        # Standardgröße verringert (512x512) reduziert Kosten; erhöhe zu 1024x1024 wenn höhere Auflösung benötigt wird.
+        image_b64 = generate_image_b64(prompt, size="512x512")
         st.session_state.image_b64 = image_b64
         st.session_state.prompt = prompt
         st.session_state.step = 3
