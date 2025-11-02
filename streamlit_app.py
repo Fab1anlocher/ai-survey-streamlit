@@ -61,8 +61,22 @@ def _get_sqlite_conn():
 @st.cache_resource
 def _get_supabase_client():
     if SUPABASE_URL and SUPABASE_KEY:
-        from supabase import create_client
-        return create_client(SUPABASE_URL, SUPABASE_KEY)
+        try:
+            # Supabase-Client import kann fehlschlagen, wenn die Dependency nicht installiert ist.
+            from supabase import create_client
+        except Exception as imp_err:
+            # Zeige eine Warnung im UI, falle aber sauber auf SQLite zurück.
+            st.warning(
+                f"Supabase-Client konnte nicht importiert werden ({imp_err}).\n"
+                "Supabase-Funktionalität ist deaktiviert — es wird auf lokale SQLite-Fallback umgeschaltet."
+            )
+            return None
+
+        try:
+            return create_client(SUPABASE_URL, SUPABASE_KEY)
+        except Exception as conn_err:
+            st.error(f"Verbindung zu Supabase fehlgeschlagen: {conn_err}")
+            return None
     return None
 
 SUPABASE = _get_supabase_client()
