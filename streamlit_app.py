@@ -213,9 +213,23 @@ def generate_image_b64(prompt: str, size: str = "1024x1024") -> str:
             f"Final status: {resp.status_code}, body: {resp.text[:1000]}"
         )
 
-    resp.raise_for_status()
+    # Handle HTTP errors with clearer messages (include JSON body if present)
+    try:
+        resp.raise_for_status()
+    except requests.HTTPError as http_err:
+        body = None
+        try:
+            body = resp.json()
+        except Exception:
+            body = resp.text
+        raise RuntimeError(f"Image generation failed: {resp.status_code} {resp.reason} - {body}")
 
-    j = resp.json()
+    j = None
+    try:
+        j = resp.json()
+    except Exception as e:
+        raise RuntimeError(f"Could not parse JSON response from image API: {e} - body: {resp.text[:1000]}")
+
     # Response shape may vary; attempt to extract base64 payload
     try:
         return j["data"][0]["b64_json"]
