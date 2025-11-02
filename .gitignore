@@ -11,3 +11,7 @@ survey.db
 # Streamlit / cache
 .streamlit/
 .cache/
+
+# Ensure secrets file and local DB are ignored
+survey.db
+.env
