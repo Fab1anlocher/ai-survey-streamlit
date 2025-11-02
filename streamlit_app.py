@@ -182,11 +182,45 @@ def db_fetch_recent(n=50):
 def generate_image_b64(prompt: str, size: str = "1024x1024") -> str:
     if not OPENAI_API_KEY:
         raise RuntimeError("OPENAI_API_KEY fehlt in st.secrets.")
-    headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
+    # Build headers explicitly (Content-Type + Accept) to avoid unexpected redirects
+    headers = {
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+
     payload = {"model": "gpt-image-1", "prompt": prompt, "size": size}
-    resp = requests.post("https://api.openai.com/v1/images/generations", json=payload, headers=headers, timeout=90)
+    url = "https://api.openai.com/v1/images/generations"
+
+    resp = requests.post(url, json=payload, headers=headers, timeout=90, allow_redirects=True)
+
+    # If the request was redirected, some servers convert the method to GET which causes
+    # an "Invalid method for URL (GET ...)" error on the API side. Detect and report that.
+    try:
+        final_method = resp.request.method
+        final_url = resp.request.url
+    except Exception:
+        final_method = None
+        final_url = None
+
+    if resp.history and final_method and final_method.upper() != "POST":
+        # Provide a clear error message so user can spot redirect/misconfiguration
+        raise RuntimeError(
+            f"Image generation request was redirected and the final request used method={final_method} to {final_url}. "
+            "This often means the endpoint redirected (301/302) and changed POST→GET. "
+            "Check the request URL, avoid HTTP->HTTPS redirects, and ensure the endpoint is correct. "
+            f"Response history: {[ (r.status_code, r.headers.get('location')) for r in resp.history ]}. "
+            f"Final status: {resp.status_code}, body: {resp.text[:1000]}"
+        )
+
     resp.raise_for_status()
-    return resp.json()["data"][0]["b64_json"]
+
+    j = resp.json()
+    # Response shape may vary; attempt to extract base64 payload
+    try:
+        return j["data"][0]["b64_json"]
+    except Exception:
+        raise RuntimeError(f"Unexpected image response shape: {j}")
 
 # ---------- UI ----------
 st.title("🎯 Visuelles Präferenz-Experiment (neutral, ohne Text/Logos)")
