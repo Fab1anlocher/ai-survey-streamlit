@@ -51,7 +51,7 @@ def _get_sqlite_conn():
             prompt TEXT,
             image_b64 TEXT,
             gefallen INTEGER,
-            überzeugung INTEGER,
+            ueberzeugung INTEGER,
             kommentar TEXT,
             extras_json TEXT
         )
@@ -94,31 +94,32 @@ def db_insert_response(row: dict):
             SQLITE.execute("""
                 INSERT INTO responses
                 (id, created_at, alter_group, geschlecht, bildung, richtung, einkommen,
-                 prompt, image_b64, gefallen, überzeugung, kommentar, extras_json)
+                 prompt, image_b64, gefallen, ueberzeugung, kommentar, extras_json)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 row["id"], row["created_at"], row["alter_group"], row["geschlecht"],
                 row["bildung"], row["richtung"], row.get("einkommen"),
-                row["prompt"], row["image_b64"], row["gefallen"], row["überzeugung"],
+                row["prompt"], row["image_b64"], row["gefallen"], row["ueberzeugung"],
                 row["kommentar"], row.get("extras_json","{}")
             ))
+
 
 def db_fetch_recent(n=50):
     if SUPABASE is not None:
         res = SUPABASE.table("responses") \
-            .select("id,created_at,alter_group,geschlecht,bildung,richtung,einkommen,gefallen,überzeugung") \
+            .select("id,created_at,alter_group,geschlecht,bildung,richtung,einkommen,gefallen,ueberzeugung") \
             .order("created_at", desc=True).limit(n).execute()
         if res.error:
             raise RuntimeError(str(res.error))
         return res.data or []
     else:
         cur = SQLITE.execute("""
-            SELECT id, created_at, alter_group, geschlecht, bildung, richtung, einkommen, gefallen, überzeugung
+            SELECT id, created_at, alter_group, geschlecht, bildung, richtung, einkommen, gefallen, ueberzeugung
             FROM responses ORDER BY created_at DESC LIMIT ?
         """, (n,))
         rows = cur.fetchall()
         # SQLite → Liste von Tupeln zu Dicts für einheitliche Anzeige
-        cols = ["id","created_at","alter_group","geschlecht","bildung","richtung","einkommen","gefallen","überzeugung"]
+        cols = ["id","created_at","alter_group","geschlecht","bildung","richtung","einkommen","gefallen","ueberzeugung"]
         return [dict(zip(cols, r)) for r in rows]
 
 # ---------- Image Gen ----------
@@ -210,7 +211,7 @@ if st.session_state.step == 3 and st.session_state.image_b64:
             "prompt": st.session_state.prompt,
             "image_b64": st.session_state.image_b64,
             "gefallen": int(gefallen),
-            "überzeugung": int(glaubwürdigkeit),  # Feldname beibehalten
+            "ueberzeugung": int(glaubwürdigkeit),  # ASCII-safe column name
             "kommentar": kommentar.strip(),
             "extras_json": json.dumps(st.session_state.answers.get("extras", {}), ensure_ascii=False),
         }
